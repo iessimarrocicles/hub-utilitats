@@ -3,3 +3,6 @@ dist
 
 # Material de referència de tercers: no es publica.
 documentacio/
+
+# Vídeos i fitxers de treball del servidor local.
+workspace/

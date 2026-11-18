@@ -1,7 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom'
 
 const TABS = [
-  { to: '/reels', label: 'Reels', end: true },
+  { to: '/reels/auto', label: 'Editor automàtic' },
+  { to: '/reels', label: 'Amb prompts', end: true },
   { to: '/reels/preparacio', label: 'Preparació' },
   { to: '/reels/marca', label: 'Marca' },
   { to: '/reels/skills', label: 'Skills' },

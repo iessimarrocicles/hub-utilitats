@@ -2,6 +2,8 @@ import { HashRouter, Link, Route, Routes } from 'react-router-dom'
 import { Shell } from './components/Shell'
 import { Home } from './pages/Home'
 import { ReelsLayout } from './utilities/reels/ReelsLayout'
+import { AutoPage } from './utilities/reels/auto/AutoPage'
+import { AutoProjectPage } from './utilities/reels/auto/AutoProjectPage'
 import { BrandPage } from './utilities/reels/pages/BrandPage'
 import { EffectsPage } from './utilities/reels/pages/EffectsPage'
 import { ProjectPage } from './utilities/reels/pages/ProjectPage'
@@ -32,6 +34,8 @@ export function App() {
           <Route path="reels" element={<ReelsLayout />}>
             <Route index element={<ProjectsPage />} />
             <Route path="projectes/:id" element={<ProjectPage />} />
+            <Route path="auto" element={<AutoPage />} />
+            <Route path="auto/:id" element={<AutoProjectPage />} />
             <Route path="preparacio" element={<SetupPage />} />
             <Route path="marca" element={<BrandPage />} />
             <Route path="skills" element={<SkillsPage />} />
