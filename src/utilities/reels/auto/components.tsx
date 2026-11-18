@@ -1,20 +1,55 @@
-import { AlertTriangle, CheckCircle2, Loader2, PlugZap, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Loader2, PlugZap, ShieldQuestion, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Button, Field, PromptBlock } from '../../../components/ui'
-import { DEFAULT_SERVER, serverUrl, setServerUrl, type Health } from './api'
+import { DEFAULT_SERVER, isPublicOrigin, serverUrl, setServerUrl, type Health, type LocalNetworkPermission } from './api'
 import type { Job } from './types'
 
 export function ServerStatus({
   state,
   health,
   onRetry,
+  permission,
 }: {
   state: 'checking' | 'online' | 'offline'
   health: Health | null
   onRetry: () => void
+  permission: LocalNetworkPermission
 }) {
   const [editing, setEditing] = useState(false)
   const [url, setUrl] = useState(serverUrl())
+  const publicPage = isPublicOrigin()
+
+  if (state !== 'online' && publicPage && (permission === 'prompt' || permission === 'denied')) {
+    return (
+      <div className="rounded-xl border border-take-amber/60 bg-panel p-5">
+        <div className="flex items-start gap-3">
+          <ShieldQuestion className="mt-0.5 shrink-0 text-take-amber" />
+          <div className="max-w-[65ch]">
+            <p className="headline text-xl">Chrome ha de deixar que aquesta pàgina parle amb el teu ordinador</p>
+            {permission === 'prompt' ? (
+              <p className="mt-1 text-muted">
+                Aquesta pàgina està publicada a Internet i el servidor de vídeo està al teu ordinador. Chrome t’ha de preguntar si li
+                dones accés als dispositius de la xarxa local. Accepta-ho en l’avís de la barra d’adreces i torna a provar. Si no veus
+                l’avís, recarrega la pàgina.
+              </p>
+            ) : (
+              <p className="mt-1 text-muted">
+                Chrome té bloquejat l’accés a la xarxa local per a aquesta pàgina. Fes clic en la icona que hi ha a l’esquerra de
+                l’adreça, obri «Configuració del lloc» i permet «Xarxa local». Després recarrega la pàgina.
+              </p>
+            )}
+            <p className="mt-2 text-sm text-muted">
+              També pots usar el hub des de l’ordinador, sense permisos: arranca’l amb <code className="font-mono">npm start</code> i
+              obri <code className="font-mono">http://localhost:5173</code>.
+            </p>
+            <Button className="mt-3" onClick={onRetry}>
+              Tornar a provar
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (state === 'checking') {
     return (

@@ -71,7 +71,8 @@ export interface Health {
 }
 
 export const api = {
-  health: () => request<Health>('/api/health'),
+  // Amb límit: si Chrome espera el permís de xarxa local, la petició no acaba mai sola.
+  health: () => request<Health>('/api/health', { signal: AbortSignal.timeout(15_000) }),
   references: () => request<Reference[]>('/api/references'),
   uploadReferences: (files: File[], onProgress?: (p: number) => void) => {
     const form = new FormData()
@@ -116,12 +117,29 @@ export function downloadUrl(projectId: string, which: 'final' | 'clean'): string
   return `${serverUrl()}/api/projects/${projectId}/download/${which}`
 }
 
+export type LocalNetworkPermission = 'granted' | 'prompt' | 'denied' | 'unknown'
+
+/** Permís de Chrome perquè una web pública parle amb localhost. */
+async function localNetworkPermission(): Promise<LocalNetworkPermission> {
+  try {
+    const status = await navigator.permissions.query({ name: 'local-network-access' as PermissionName })
+    return status.state
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** La pàgina s'ha obert des d'Internet (per exemple GitHub Pages) i no des de l'ordinador. */
+export const isPublicOrigin = () => !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname)
+
 /** Estat del servidor local, consultat cada pocs segons. */
 export function useServer() {
   const [health, setHealth] = useState<Health | null>(null)
   const [state, setState] = useState<'checking' | 'online' | 'offline'>('checking')
+  const [permission, setPermission] = useState<LocalNetworkPermission>('unknown')
 
   const check = useCallback(async () => {
+    if (isPublicOrigin()) setPermission(await localNetworkPermission())
     try {
       const h = await api.health()
       setHealth(h)
@@ -129,6 +147,7 @@ export function useServer() {
     } catch {
       setState('offline')
     }
+    if (isPublicOrigin()) setPermission(await localNetworkPermission())
   }, [])
 
   useEffect(() => {
@@ -137,7 +156,7 @@ export function useServer() {
     return () => clearInterval(t)
   }, [check, state])
 
-  return { health, state, check }
+  return { health, state, check, permission }
 }
 
 /** Segueix un treball fins que acaba. */

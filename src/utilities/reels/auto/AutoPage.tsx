@@ -26,7 +26,7 @@ export function AutoPage() {
         Dona-li uns reels que t’agraden i el teu vídeo gravat. Claude Code el talla, posa subtítols i el ganxo amb el teu estil. Tu ho
         revises, retoques el que vulgues i generes el vídeo final.
       </p>
-      <ServerStatus state={server.state} health={server.health} onRetry={() => void server.check()} />
+      <ServerStatus state={server.state} health={server.health} permission={server.permission} onRetry={() => void server.check()} />
       {online && (
         <>
           <ReferencesSection />
