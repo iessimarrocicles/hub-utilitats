@@ -1,4 +1,4 @@
-import { Clapperboard, type LucideIcon } from 'lucide-react'
+import { Clapperboard, MonitorPlay, type LucideIcon } from 'lucide-react'
 
 /**
  * Totes les utilitats del hub. Per a afegir-ne una de nova:
@@ -19,5 +19,12 @@ export const UTILITIES: Utility[] = [
     description: 'Prepara els teus reels per a Claude Code: fitxa de marca, prompts d’edició, revisions i els 29 efectes.',
     path: '/reels',
     icon: Clapperboard,
+  },
+  {
+    id: 'tutorials',
+    name: 'Videotutorials',
+    description: 'Dona una adreça web i obtín un videotutorial amb guió, veu, zooms i motion graphics.',
+    path: '/tutorials',
+    icon: MonitorPlay,
   },
 ]

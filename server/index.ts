@@ -9,6 +9,7 @@ import path from 'node:path'
 import type { BrandProfile } from '../src/utilities/reels/model.ts'
 import type { EditPlan, ServerProject } from '../src/utilities/reels/auto/types.ts'
 import { claudeVersion } from './claude.ts'
+import { registerTutorialRoutes } from './tutorials/routes.ts'
 import { ALLOWED_ORIGINS, PORT, PROJECTS_DIR, REFERENCES_DIR, TMP_DIR, WORKSPACE } from './config.ts'
 import { getJob, latestJob, runningJob, startJob } from './jobs.ts'
 import { run } from './lib/run.ts'
@@ -278,6 +279,10 @@ app.get(
     res.download(path.join(projectDir(id), file), file)
   }),
 )
+
+// --- Videotutorials --------------------------------------------------------
+
+registerTutorialRoutes(app)
 
 app.use((err: Error & { status?: number }, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err)

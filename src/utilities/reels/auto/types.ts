@@ -1,5 +1,7 @@
 /** Tipus compartits entre el servidor local (server/) i la interfície. */
 
+import type { TutorialJobKind } from '../../tutorials/types'
+
 export type RemovedKind = 'equivocacio' | 'repeticio' | 'muletilla' | 'silenci' | 'altres'
 export type SegmentKind = 'contingut' | RemovedKind
 
@@ -87,7 +89,7 @@ export interface ServerProject {
   notices?: string[]
 }
 
-export type JobKind = 'look' | 'auto' | 'preview' | 'final'
+export type JobKind = 'look' | 'auto' | 'preview' | 'final' | TutorialJobKind
 
 export interface Job {
   id: string

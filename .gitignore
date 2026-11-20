@@ -6,3 +6,11 @@ documentacio/
 
 # Vídeos i fitxers de treball del servidor local.
 workspace/
+
+# Entorn de Python per a la veu (Kokoro, F5-TTS, Whisper) i claus locals.
+.venv/
+.env
+
+# Memòria cau de Python i estat local de HyperFrames.
+__pycache__/
+.hyperframes/

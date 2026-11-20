@@ -32,6 +32,45 @@ npm start
 
 **Amb prompts.** Cabina de control per al flux de la guia: fitxa de marca (`marca.md`), skills, els 29 efectes i prompts per a enganxar a Claude Code.
 
+### Videotutorials
+
+Dona una adreça web i obtín un videotutorial en castellà. Necessita el servidor local.
+
+1. **Anàlisi i guió.** Playwright obri la pàgina, en llig els elements interactius i fa captures numerades. Claude Code les mira i escriu el guió per capítols i escenes: narració, accions, element destacat i bafarada. Després el prova a la pàgina real i, si un pas falla, el corregeix.
+2. **Revisió.** Edites la narració, l’ordre, les bafarades i els motion graphics de cada escena.
+3. **Generació.** Tries plantilla, format (16:9 1080p, 4K o 9:16) i com es fa la veu:
+   - **Kokoro** (local, processador): ràpida i gratis, tres veus en castellà.
+   - **F5-TTS** (local, targeta gràfica): clona la teua veu a partir d’una mostra de 10-15 s.
+   - **ElevenLabs** (núvol): la millor qualitat, gasta crèdits.
+4. **Vídeo.** Primer la veu; després el navegador grava cada escena al ritme de la veu a 3840×2160; Remotion ho munta amb zoom automàtic, cursor suau, ressaltats, subtítols i barra de capítols; HyperFrames fa la intro i el tancament; ffmpeg deixa el volum a −16 LUFS i afegeix els capítols. També genera SRT, VTT i miniatura.
+
+Si només canvies la plantilla o els graphics, la gravació es reaprofita. Amb el guió gravat una vegada, la previsualització en directe ensenya els canvis sense renderitzar.
+
+Requisits addicionals (a més dels de baix):
+
+```bash
+npx playwright install chromium chromium-headless-shell   # el «headless shell» fa el render fins a 5 vegades més ràpid
+python -m venv .venv
+.venv\Scripts\pip install kokoro-onnx soundfile faster-whisper
+# Kokoro: kokoro-v1.0.onnx i voices-v1.0.bin (github.com/thewh1teagle/kokoro-onnx, release model-files-v1.0) a workspace/models/kokoro/
+# F5-TTS (opcional, GPU NVIDIA):
+.venv\Scripts\pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\pip install f5-tts
+# Model en castellà (jpgallegoar/F5-Spanish, CC BY-NC 4.0: només ús no comercial) a workspace/models/f5-spanish/
+# HyperFrames (opcional, per a la intro i el tancament): npm install -g hyperframes
+```
+
+| Variable | Per defecte | Per a què |
+| --- | --- | --- |
+| `ELEVENLABS_API_KEY` | buida | Clau d’ElevenLabs, al fitxer `.env` (fora de git) |
+| `HUB_ELEVENLABS_MODEL` | `eleven_multilingual_v2` | Model d’ElevenLabs |
+| `HUB_TTS_PYTHON` | `.venv` | Python amb Kokoro, Whisper i F5-TTS |
+| `HUB_KOKORO_THREADS` | `4` | Fils de Kokoro: en CPU híbrides, pocs fils van més ràpid |
+| `HUB_ALIGN_MODEL` | `small` | Model de Whisper per al temps de cada paraula |
+| `HUB_BROWSER_PATH` | Chromium de Playwright | Navegador per a gravar i renderitzar |
+
+Remotion és gratuït per a particulars i empreses de fins a 3 persones. Per a ús institucional pot caldre una llicència d’empresa: <https://remotion.dev/license>.
+
 ## Requisits del servidor local
 
 - Node 24 o posterior. Executa el TypeScript de `server/` sense compilar.
@@ -47,7 +86,7 @@ Variables opcionals:
 | `HUB_WORKSPACE` | `./workspace` | On es guarden els vídeos |
 | `HUB_WHISPER_MODEL` | `small` | `base` va més ràpid i `medium` encerta més |
 | `HUB_CLAUDE_MODEL` | el teu | Model de Claude Code |
-| `HUB_PYTHON` | `python` | Intèrpret de Python |
+| `HUB_PYTHON` | `python` | Intèrpret de Python (reels) |
 
 Els vídeos i fitxers de treball viuen a `workspace/`, fora de git. El servidor només escolta a `127.0.0.1`.
 

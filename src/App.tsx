@@ -11,6 +11,11 @@ import { ProjectsPage } from './utilities/reels/pages/ProjectsPage'
 import { RulesPage } from './utilities/reels/pages/RulesPage'
 import { SetupPage } from './utilities/reels/pages/SetupPage'
 import { SkillsPage } from './utilities/reels/pages/SkillsPage'
+import { TutorialsLayout } from './utilities/tutorials/TutorialsLayout'
+import { ProjectsPage as TutorialsProjectsPage } from './utilities/tutorials/pages/ProjectsPage'
+import { TemplatesPage } from './utilities/tutorials/pages/TemplatesPage'
+import { TutorialPage } from './utilities/tutorials/pages/TutorialPage'
+import { VoicesPage } from './utilities/tutorials/pages/VoicesPage'
 
 function NotFound() {
   return (
@@ -41,6 +46,12 @@ export function App() {
             <Route path="skills" element={<SkillsPage />} />
             <Route path="efectes" element={<EffectsPage />} />
             <Route path="regles" element={<RulesPage />} />
+          </Route>
+          <Route path="tutorials" element={<TutorialsLayout />}>
+            <Route index element={<TutorialsProjectsPage />} />
+            <Route path="plantilles" element={<TemplatesPage />} />
+            <Route path="veus" element={<VoicesPage />} />
+            <Route path=":id" element={<TutorialPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Route>
