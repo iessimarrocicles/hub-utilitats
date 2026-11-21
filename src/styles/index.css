@@ -113,7 +113,8 @@ body {
   outline-offset: 2px;
 }
 
-input,
+/* Sense caselles ni ràdios: aquesta regla no té capa i guanyaria a «sr-only» de Tailwind. */
+input:not([type="checkbox"]):not([type="radio"]),
 textarea,
 select {
   background: var(--panel);

@@ -1,19 +1,19 @@
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer'
 import { existsSync } from 'node:fs'
-import { readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { BUILTIN_TEMPLATES, GRAPHICS } from '../../src/utilities/tutorials/catalog.ts'
-import type { GenerateSettings, StyleTemplate, TutorialProject, VoiceOptions } from '../../src/utilities/tutorials/types.ts'
-import { ELEVENLABS_API_KEY, SESSION_FILE, TMP_DIR, TUTORIALS_DIR, VOICES_DIR } from '../config.ts'
+import { TTS_ENGINES, type CoverText, type GenerateSettings, type StyleTemplate, type TutorialProject, type VoiceOptions } from '../../src/utilities/tutorials/types.ts'
+import { ELEVENLABS_API_KEY, PY_DIR, SESSION_FILE, TMP_DIR, TTS_PYTHON, TUTORIALS_DIR, VOICES_DIR } from '../config.ts'
 import { latestJob, runningJob, startJob } from '../jobs.ts'
 import { runOk } from '../lib/run.ts'
 import { newId } from '../store.ts'
 import { friendlyError, loginSession } from './browser.ts'
-import { analyzeAndScript, generate, makeVoice } from './pipeline.ts'
+import { analyzeAndScript, generate, makeCoverStill, makeVoice } from './pipeline.ts'
 import { dryRun } from './script.ts'
 import { customTemplates, getTutorial, listTutorials, saveCustomTemplates, saveTutorial, tutorialDir, updateTutorial } from './store.ts'
-import { ENGINE_NAMES, engineStatus, KOKORO_SPANISH_VOICES, synthesize } from './tts.ts'
+import { ENGINE_NAMES, engineStatus, KOKORO_SPANISH_VOICES, synthesize, voicestudioVoices } from './tts.ts'
 
 type Handler = (req: Request, res: Response) => Promise<unknown>
 const wrap = (h: Handler) => (req: Request, res: Response, next: NextFunction) => h(req, res).catch(next)
@@ -38,7 +38,7 @@ function validUrl(u: unknown): string {
 }
 
 function voiceFrom(v: Partial<VoiceOptions> | undefined): VoiceOptions {
-  const engine = v?.engine && ['kokoro', 'f5', 'elevenlabs'].includes(v.engine) ? v.engine : 'kokoro'
+  const engine = v?.engine && TTS_ENGINES.includes(v.engine) ? v.engine : 'kokoro'
   return { engine, voice: String(v?.voice || 'ef_dora'), speed: Math.min(1.25, Math.max(0.75, Number(v?.speed ?? 1))) }
 }
 
@@ -49,7 +49,14 @@ function settingsFrom(body: Partial<GenerateSettings> | undefined): GenerateSett
     format: body?.format && ['1080p', '4k', 'vertical'].includes(body.format) ? body.format : '1080p',
     voice: voiceFrom(body?.voice),
     graphics: (body?.graphics ?? []).filter((g) => ids.has(g)),
+    coverInVideo: body?.coverInVideo !== false,
   }
+}
+
+function coverFrom(c: Partial<CoverText> | null | undefined): CoverText | undefined {
+  if (!c) return undefined
+  const clip = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n)
+  return { title: clip(c.title, 60), subtitle: clip(c.subtitle, 90), brand: clip(c.brand, 40) }
 }
 
 /** Una sola tasca alhora per tutorial. */
@@ -119,6 +126,13 @@ export function registerTutorialRoutes(app: Express): void {
       if (!r.ok) throw fail(502, `ElevenLabs ha respost amb l’error ${r.status}.`)
       const data = (await r.json()) as { voices: { voice_id: string; name: string; labels?: Record<string, string> }[] }
       res.json(data.voices.map((v) => ({ id: v.voice_id, name: v.name, detail: Object.values(v.labels ?? {}).join(', ') })))
+    }),
+  )
+
+  app.get(
+    '/api/tutorials/voicestudio/voices',
+    wrap(async (_req, res) => {
+      res.json((await voicestudioVoices()) ?? [])
     }),
   )
 
@@ -284,6 +298,66 @@ export function registerTutorialRoutes(app: Express): void {
       if (!p.storyboard) throw fail(400, 'Encara no hi ha guió.')
       const settings = settingsFrom(req.body as Partial<GenerateSettings>)
       startTutorialJob(res, 'tut-generate', p.id, (ctx) => generate(p.id, settings, ctx))
+    }),
+  )
+
+  // --- Miniatura -------------------------------------------------------------------
+
+  /** Desa els textos de la miniatura. Amb cover: null, torna a la proposta del guió. */
+  app.put(
+    '/api/tutorials/:id/cover',
+    wrap(async (req, res) => {
+      const p = await project(req)
+      const cover = coverFrom((req.body as { cover?: Partial<CoverText> | null }).cover)
+      res.json(await updateTutorial(p.id, (t) => (t.cover = cover)))
+    }),
+  )
+
+  /** Puja la imatge de la miniatura i li lleva el fons (si no és ja transparent). */
+  app.post(
+    '/api/tutorials/:id/cover-image',
+    upload.single('file'),
+    wrap(async (req, res) => {
+      const p = await project(req)
+      const f = req.file
+      if (!f) throw fail(400, 'Falta la imatge.')
+      if (!/^image\//.test(f.mimetype)) {
+        await rm(f.path, { force: true })
+        throw fail(400, 'El fitxer no és una imatge (PNG, JPG o WebP).')
+      }
+      const dir = path.join(tutorialDir(p.id), 'cover')
+      await mkdir(dir, { recursive: true })
+      const file = `cover/imatge-${Date.now()}.png`
+      try {
+        await runOk(TTS_PYTHON, [path.join(PY_DIR, 'cutout.py'), f.path, path.join(tutorialDir(p.id), file)], { timeoutMs: 10 * 60_000 })
+      } catch (err) {
+        throw fail(500, `No s’ha pogut llevar el fons de la imatge. Comprova que rembg està instal·lat a .venv. ${(err as Error).message.split('\n').slice(-1)[0]}`)
+      } finally {
+        await rm(f.path, { force: true })
+      }
+      const old = p.coverImage?.file
+      const saved = await updateTutorial(p.id, (t) => (t.coverImage = { file, updatedAt: new Date().toISOString() }))
+      if (old) await rm(path.join(tutorialDir(p.id), old), { force: true })
+      res.json(saved)
+    }),
+  )
+
+  app.delete(
+    '/api/tutorials/:id/cover-image',
+    wrap(async (req, res) => {
+      const p = await project(req)
+      if (p.coverImage) await rm(path.join(tutorialDir(p.id), p.coverImage.file), { force: true })
+      res.json(await updateTutorial(p.id, (t) => (t.coverImage = undefined)))
+    }),
+  )
+
+  /** Genera la miniatura com a imatge, sense fer el vídeo (uns segons). */
+  app.post(
+    '/api/tutorials/:id/cover-still',
+    wrap(async (req, res) => {
+      const p = await project(req)
+      if (runningJob(p.id)) throw fail(409, 'Espera que acabe la tasca en marxa.')
+      res.json(await makeCoverStill(p.id))
     }),
   )
 

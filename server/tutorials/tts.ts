@@ -3,8 +3,19 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { SceneAudio, TimedWord, TtsEngineId, VoiceOptions } from '../../src/utilities/tutorials/types.ts'
-import { ELEVENLABS_API_KEY, ELEVENLABS_MODEL, MODELS_DIR, PY_DIR, TTS_PYTHON, VOICES_DIR } from '../config.ts'
+import {
+  ELEVENLABS_API_KEY,
+  ELEVENLABS_FORMAT,
+  ELEVENLABS_MODEL,
+  MODELS_DIR,
+  PY_DIR,
+  TTS_PYTHON,
+  VOICES_DIR,
+  VOICESTUDIO_MODEL,
+  VOICESTUDIO_URL,
+} from '../config.ts'
 import { run, runOk } from '../lib/run.ts'
+import { parseVoices, speechRequest, VOICESTUDIO_MAX_CHARS, type VoiceStudioVoice } from './lib/voicestudio.ts'
 import { alignToText, charsToWords, proportionalWords } from './lib/words.ts'
 
 const KOKORO_MODEL = path.join(MODELS_DIR, 'kokoro', 'kokoro-v1.0.onnx')
@@ -75,7 +86,7 @@ async function f5(items: { text: string; raw: string }[], voice: VoiceOptions, w
 
 async function elevenlabs(text: string, voice: VoiceOptions, raw: string): Promise<TimedWord[]> {
   if (!ELEVENLABS_API_KEY) throw new Error('Falta ELEVENLABS_API_KEY al fitxer .env del hub.')
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice.voice)}/with-timestamps?output_format=mp3_44100_192`
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice.voice)}/with-timestamps?output_format=${ELEVENLABS_FORMAT}`
   let lastError = ''
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(url, {
@@ -97,10 +108,48 @@ async function elevenlabs(text: string, voice: VoiceOptions, raw: string): Promi
       return data.alignment ? charsToWords(text, data.alignment) : []
     }
     lastError = `${res.status} ${(await res.text()).slice(0, 300)}`
-    if (res.status === 401 || res.status === 422) break
+    // Clau, permisos, pla o dades incorrectes: reintentar no ho arregla.
+    if ([401, 402, 403, 422].includes(res.status)) break
     await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
   }
   throw new Error(`ElevenLabs ha fallat: ${lastError}`)
+}
+
+async function voicestudio(text: string, voice: VoiceOptions, raw: string): Promise<void> {
+  if (text.length > VOICESTUDIO_MAX_CHARS) {
+    throw new Error(`VoiceStudio accepta com a màxim ${VOICESTUDIO_MAX_CHARS} caràcters per escena. Escurça la narració.`)
+  }
+  let res: Response
+  try {
+    res = await fetch(`${VOICESTUDIO_URL}/v1/audio/speech`, {
+      method: 'POST',
+      // En local no cal clau, però l'API espera una capçalera d'autorització no buida.
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer local' },
+      body: JSON.stringify(speechRequest({ text, voice: voice.voice, speed: voice.speed, model: VOICESTUDIO_MODEL })),
+      // Amb processador, alguns motors de VoiceStudio tarden molt: fins a 2 hores per escena.
+      signal: AbortSignal.timeout(2 * 60 * 60_000),
+    })
+  } catch (e) {
+    throw new Error(`No hi ha connexió amb VoiceStudio a ${VOICESTUDIO_URL}. Obri l’aplicació i torna a provar. (${(e as Error).message})`)
+  }
+  if (!res.ok) throw new Error(`VoiceStudio ha fallat: ${res.status} ${(await res.text()).slice(0, 300)}`)
+  const type = res.headers.get('content-type') ?? ''
+  if (type.includes('json')) throw new Error(`VoiceStudio no ha tornat àudio: ${(await res.text()).slice(0, 300)}`)
+  await writeFile(raw, Buffer.from(await res.arrayBuffer()))
+}
+
+/** Perfils de veu de VoiceStudio, o null si l'aplicació no està oberta. */
+export async function voicestudioVoices(): Promise<VoiceStudioVoice[] | null> {
+  try {
+    const res = await fetch(`${VOICESTUDIO_URL}/v1/audio/voices`, {
+      headers: { Authorization: 'Bearer local' },
+      signal: AbortSignal.timeout(3000),
+    })
+    if (!res.ok) return null
+    return parseVoices(await res.json())
+  } catch {
+    return null
+  }
 }
 
 async function alignBatch(items: { wav: string; text: string }[], workDir: string): Promise<TimedWord[][] | null> {
@@ -150,7 +199,12 @@ export async function synthesize(
     const known = new Map<string, TimedWord[]>()
     if (voice.engine === 'kokoro') await kokoro(pending, voice, audioDir)
     else if (voice.engine === 'f5') await f5(pending, voice, audioDir)
-    else {
+    else if (voice.engine === 'voicestudio') {
+      for (const [k, p] of pending.entries()) {
+        progress.stage(`VoiceStudio: escena ${k + 1} de ${pending.length}`, 0.05 + (0.5 * k) / pending.length)
+        await voicestudio(p.text, voice, p.raw)
+      }
+    } else {
       for (const [k, p] of pending.entries()) {
         progress.stage(`ElevenLabs: escena ${k + 1} de ${pending.length}`, 0.05 + (0.5 * k) / pending.length)
         known.set(p.sceneId, await elevenlabs(p.text, voice, p.raw))
@@ -181,14 +235,16 @@ export const ENGINE_NAMES: Record<TtsEngineId, string> = {
   kokoro: 'Kokoro (local)',
   f5: 'F5-TTS (local, la teua veu)',
   elevenlabs: 'ElevenLabs',
+  voicestudio: 'VoiceStudio (local)',
 }
 
 /** Quins motors estan llestos en aquest ordinador. */
 export async function engineStatus(): Promise<Record<TtsEngineId, { ready: boolean; detail: string }>> {
   const py = async (code: string) => (await run(TTS_PYTHON, ['-c', code], { timeoutMs: 60_000 }).catch(() => ({ code: 1 }))).code === 0
-  const [kokoroPy, f5Py] = await Promise.all([
+  const [kokoroPy, f5Py, vsVoices] = await Promise.all([
     py('import kokoro_onnx, soundfile'),
     py('import f5_tts, torch; assert torch.cuda.is_available()'),
+    voicestudioVoices(),
   ])
   const kokoroFiles = existsSync(KOKORO_MODEL) && existsSync(KOKORO_VOICES)
   return {
@@ -201,5 +257,9 @@ export async function engineStatus(): Promise<Record<TtsEngineId, { ready: boole
       detail: !f5Py ? 'Falta F5-TTS o PyTorch amb CUDA a .venv' : !existsSync(F5_CKPT) ? 'Falta el model en castellà a workspace/models/f5-spanish' : 'Llest (GPU)',
     },
     elevenlabs: { ready: !!ELEVENLABS_API_KEY, detail: ELEVENLABS_API_KEY ? 'Clau configurada' : 'Falta ELEVENLABS_API_KEY a .env' },
+    voicestudio: {
+      ready: vsVoices != null,
+      detail: vsVoices ? `Connectat a ${VOICESTUDIO_URL}` : `VoiceStudio no està obert (${VOICESTUDIO_URL})`,
+    },
   }
 }

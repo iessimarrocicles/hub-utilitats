@@ -51,7 +51,7 @@ Requisits addicionals (a més dels de baix):
 ```bash
 npx playwright install chromium chromium-headless-shell   # el «headless shell» fa el render fins a 5 vegades més ràpid
 python -m venv .venv
-.venv\Scripts\pip install kokoro-onnx soundfile faster-whisper
+.venv\Scripts\pip install kokoro-onnx soundfile faster-whisper "av<19"   # av 19 trenca faster-whisper 1.2.1
 # Kokoro: kokoro-v1.0.onnx i voices-v1.0.bin (github.com/thewh1teagle/kokoro-onnx, release model-files-v1.0) a workspace/models/kokoro/
 # F5-TTS (opcional, GPU NVIDIA):
 .venv\Scripts\pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126

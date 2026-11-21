@@ -3,14 +3,15 @@ import { existsSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { runOk } from '../lib/run.ts'
-import type { CompositionInput, GenerateSettings, SceneAudio, Storyboard, StyleTemplate, TutorialProject } from '../../src/utilities/tutorials/types.ts'
+import type { CompositionInput, CoverInput, GenerateSettings, SceneAudio, Storyboard, StyleTemplate, TutorialProject } from '../../src/utilities/tutorials/types.ts'
 import { BUILTIN_TEMPLATES } from '../../src/utilities/tutorials/catalog.ts'
+import { estimateSeconds, projectCover } from '../../video/lib/cover.ts'
 import { PORT } from '../config.ts'
 import type { JobContext } from '../jobs.ts'
 import { analyzePage } from './analyze.ts'
 import { captureStoryboard } from './capture.ts'
 import { hyperframesAvailable, renderTitles, usesHyperframes } from './hyperframes.ts'
-import { renderTutorial } from './compose.ts'
+import { renderCoverStill, renderTutorial } from './compose.ts'
 import { writeScript } from './script.ts'
 import { customTemplates, getTutorial, tutorialDir, updateTutorial } from './store.ts'
 import { synthesize } from './tts.ts'
@@ -108,7 +109,31 @@ export async function compositionInput(p: TutorialProject, settings: GenerateSet
     template,
     graphics: settings.graphics,
     format: settings.format,
+    cover: coverInput(p, settings.coverInVideo !== false),
   }
+}
+
+/** Dades de la miniatura d'un projecte: textos, imatge sense fons i si ix al vídeo. */
+export function coverInput(p: TutorialProject, inVideo: boolean, seconds?: number): CoverInput {
+  return {
+    ...projectCover(p),
+    image: p.coverImage ? filesUrl(p.id, p.coverImage.file) : undefined,
+    inVideo,
+    seconds,
+  }
+}
+
+/** Genera la miniatura com a imatge, sense haver de fer el vídeo. */
+export async function makeCoverStill(id: string): Promise<TutorialProject> {
+  const p = (await getTutorial(id))!
+  const format = p.settings?.format ?? '1080p'
+  // Amb vídeo, la durada real; si no, una estimació a partir de la narració.
+  const seconds = p.final?.duration ?? (p.storyboard ? estimateSeconds(p.storyboard) : 60)
+  const file = `${slug(p.storyboard?.title || p.name)}-miniatura.jpg`
+  await renderCoverStill({ cover: coverInput(p, false, seconds), format, seconds }, path.join(tutorialDir(id), file))
+  return updateTutorial(id, (t) => {
+    t.coverStill = { file, updatedAt: new Date().toISOString() }
+  })
 }
 
 /** Del guió al vídeo final: veu → captura (si cal) → render. */
@@ -160,6 +185,7 @@ export async function generate(id: string, settings: GenerateSettings, ctx: JobC
   const r = await renderTutorial(input, dir, name, { stage: sub(ctx, 0.45, 1) })
   await updateTutorial(id, (t) => {
     t.status = 'final'
+    if (r.coverError) t.notices = [...(t.notices ?? []), `La miniatura amb la plantilla ha fallat i s’ha usat un fotograma del vídeo: ${r.coverError}`]
     t.final = {
       file: r.file,
       srt: `${name}.srt`,

@@ -3,6 +3,7 @@ import { AbsoluteFill, Html5Audio, OffthreadVideo, Sequence, interpolate, useCur
 import type { CompositionInput } from '../src/utilities/tutorials/types.ts'
 import { CaptureSegment } from './components/CaptureSegment.tsx'
 import { ChapterCard, Intro, Outro, Summary } from './components/Cards.tsx'
+import { Cover } from './components/Cover.tsx'
 import { fontFamily, loadTemplateFonts } from './fonts.ts'
 import { buildTimeline, toFrames, type Timeline } from './lib/timeline.ts'
 
@@ -16,6 +17,7 @@ export function Tutorial(input: CompositionInput) {
       {timeline.segments.map((s, i) => (
         <Sequence key={i} from={toFrames(s.from)} durationInFrames={Math.max(1, toFrames(s.duration))} premountFor={30}>
           <Transition kind={t.transition} duration={s.duration} first={i === 0}>
+            {s.kind === 'cover' && input.cover && <Cover cover={input.cover} seconds={input.cover.seconds ?? timeline.duration} />}
             {s.kind === 'intro' &&
               (input.clips?.intro ? <OffthreadVideo src={input.clips.intro} muted /> : <Intro t={t} board={input.storyboard} duration={s.duration} />)}
             {s.kind === 'chapter-card' && (

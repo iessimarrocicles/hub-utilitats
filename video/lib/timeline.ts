@@ -1,4 +1,5 @@
 import type { CompositionInput, GraphicId, SceneTiming, VideoFormat } from '../../src/utilities/tutorials/types.ts'
+import { COVER_SECONDS } from './cover.ts'
 
 export const FPS = 60
 
@@ -14,6 +15,7 @@ export const DURATIONS = { intro: 4.2, chapterCard: 2.4, summary: 6.5, outro: 4.
 export const VOICE_DELAY = 0.15
 
 export type Segment =
+  | { kind: 'cover'; from: number; duration: number }
   | { kind: 'intro'; from: number; duration: number }
   | { kind: 'chapter-card'; from: number; duration: number; chapterIndex: number }
   | { kind: 'capture'; from: number; duration: number; chapterIndex: number; captureStart: number; scenes: SceneTiming[] }
@@ -39,7 +41,7 @@ export interface Timeline {
 
 const has = (g: GraphicId[], id: GraphicId) => g.includes(id)
 
-export function buildTimeline(input: Pick<CompositionInput, 'storyboard' | 'capture' | 'audio' | 'graphics'>): Timeline {
+export function buildTimeline(input: Pick<CompositionInput, 'storyboard' | 'capture' | 'audio' | 'graphics' | 'cover'>): Timeline {
   const { storyboard, capture, audio, graphics } = input
   const segments: Segment[] = []
   const voices: VoiceClip[] = []
@@ -47,6 +49,12 @@ export function buildTimeline(input: Pick<CompositionInput, 'storyboard' | 'capt
   const chapters: Timeline['chapters'] = []
   const audioBy = new Map(audio.map((a) => [a.sceneId, a]))
   let t = 0
+
+  // La miniatura obri el vídeo, abans de la intro.
+  if (input.cover?.inVideo) {
+    segments.push({ kind: 'cover', from: t, duration: COVER_SECONDS })
+    t += COVER_SECONDS
+  }
 
   if (has(graphics, 'intro')) {
     segments.push({ kind: 'intro', from: t, duration: DURATIONS.intro })

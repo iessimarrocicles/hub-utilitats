@@ -20,6 +20,11 @@ const HELP: Record<TtsEngineId, { title: string; text: string; setup?: string }>
     text: 'La millor qualitat i entonació. Gasta crèdits del teu compte. La clau es guarda en un fitxer .env del hub, fora de git.',
     setup: '# fitxer .env a la carpeta del hub\nELEVENLABS_API_KEY=la-teua-clau',
   },
+  voicestudio: {
+    title: 'VoiceStudio · local, molts motors',
+    text: 'Aplicació gratuïta de codi obert amb una vintena de motors de veu i clonació. El hub usa el motor que tingues actiu a VoiceStudio. Amb processador, els motors grans van molt lents: tria’n un de lleuger (Supertonic-3, PocketTTS) o usa una gràfica moderna. Revisa la llicència del model: el motor per defecte, OmniVoice, no permet ús comercial.',
+    setup: '# Instal·la VoiceStudio (voicestudio.sh) i deixa’l obert.\n# El hub el troba a http://localhost:3900.\n# Per a un altre port: HUB_VOICESTUDIO_URL=http://localhost:PORT al fitxer .env',
+  },
 }
 
 export function VoicesPage() {
@@ -39,7 +44,7 @@ export function VoicesPage() {
     <div className="space-y-6">
       {error && <Notice>{error}</Notice>}
       <Section title="Motors de veu" intro="Quan generes un vídeo tries quin s’usa. Ací veus quins estan llestos en aquest ordinador.">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {(Object.keys(HELP) as TtsEngineId[]).map((e) => (
             <div key={e} className="rounded-lg border border-line p-4">
               <div className="flex items-center gap-2">

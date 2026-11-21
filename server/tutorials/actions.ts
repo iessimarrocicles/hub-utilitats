@@ -148,6 +148,14 @@ export async function performAction(page: Page, action: Action, ctx: ActionConte
       await page.mouse.up()
       record(ctx, 'click', tClick, { box })
       await sleep(page, 250)
+      // Com fill() a la prova: substitueix el que hi haja (p. ex. un nom proposat per la web).
+      const current = await loc.inputValue({ timeout: 1000 }).catch(() => '')
+      if (current) {
+        await page.keyboard.press('ControlOrMeta+A')
+        await sleep(page, 120)
+        await page.keyboard.press('Backspace')
+        await sleep(page, 200)
+      }
       const t0 = ctx.now()
       // Cadència humana: més ràpid dins de les paraules, pauses als espais.
       for (const ch of text) {

@@ -1,7 +1,13 @@
+import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
+import path from 'node:path'
 import { chromium, type Browser, type BrowserContext, type Locator as PwLocator, type Page } from 'playwright'
 import type { Locator } from '../../src/utilities/tutorials/types.ts'
-import { BROWSER_PATH, SESSION_FILE } from '../config.ts'
+import { BROWSER_PATH, SESSION_FILE, WORKSPACE } from '../config.ts'
+
+/** Perfil del Chrome on l'usuari inicia sessió (fora del control de Playwright). */
+const PROFILE_DIR = path.join(WORKSPACE, 'browser-profile')
 
 export const VIEWPORT = { width: 1920, height: 1080 }
 
@@ -90,27 +96,43 @@ export function describe(loc: Locator | undefined): string {
     .join(' ')
 }
 
+const SYSTEM_CHROME = [
+  process.env.PROGRAMFILES && path.join(process.env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+  process.env['PROGRAMFILES(X86)'] && path.join(process.env['PROGRAMFILES(X86)'], 'Google', 'Chrome', 'Application', 'chrome.exe'),
+  process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+].find((p): p is string => !!p && existsSync(p))
+
 /**
  * Obri un navegador visible perquè l'usuari inicie sessió.
- * Quan tanca la finestra, es desa la sessió per a les captures.
+ * És un Chrome normal, sense Playwright: Google («Aquest navegador no és segur») i altres
+ * proveïdors bloquegen l'inici de sessió als navegadors automatitzats. Quan l'usuari el tanca,
+ * Playwright obri el mateix perfil sense finestra i en desa la sessió per a les captures.
  */
 export async function loginSession(url: string): Promise<void> {
-  const browser = await chromium.launch({ ...launchOptions(false), args: [] })
-  const context = await browser.newContext({
-    viewport: null,
-    locale: 'es-ES',
-    storageState: existsSync(SESSION_FILE) ? SESSION_FILE : undefined,
+  const exe = BROWSER_PATH || SYSTEM_CHROME || chromium.executablePath()
+  await mkdir(PROFILE_DIR, { recursive: true })
+  const child = spawn(exe, [`--user-data-dir=${PROFILE_DIR}`, '--no-first-run', '--no-default-browser-check', '--lang=es-ES', '--new-window', url], {
+    stdio: 'ignore',
   })
-  const page = await context.newPage()
-  await page.goto(url).catch(() => {})
-  // Espera que l'usuari tanque totes les pestanyes.
-  await new Promise<void>((done) => {
-    const check = () => {
-      if (context.pages().length === 0) done()
-    }
-    context.on('page', (p) => p.on('close', check))
-    page.on('close', check)
+  await new Promise<void>((done, fail) => {
+    child.once('error', fail)
+    child.once('exit', () => done())
   })
-  await context.storageState({ path: SESSION_FILE })
-  await browser.close()
+  // El procés llançat pot acabar de seguida (Chrome es torna a obrir en un altre procés):
+  // el perfil està en ús mentre existeix el seu «lockfile», que Chrome esborra en tancar-se.
+  const lock = path.join(PROFILE_DIR, 'lockfile')
+  await new Promise((r) => setTimeout(r, 3000))
+  while (existsSync(lock)) await new Promise((r) => setTimeout(r, 1000))
+  await new Promise((r) => setTimeout(r, 1000))
+  const context = await chromium.launchPersistentContext(PROFILE_DIR, { headless: true, executablePath: exe })
+  try {
+    // storageState només inclou l'emmagatzematge dels llocs visitats en aquest context.
+    const page = context.pages()[0] ?? (await context.newPage())
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => {})
+    await page.waitForTimeout(5000)
+    // indexedDB: llocs com ElevenLabs (Firebase) hi guarden part de l'inici de sessió.
+    await context.storageState({ path: SESSION_FILE, indexedDB: true })
+  } finally {
+    await context.close()
+  }
 }

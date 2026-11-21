@@ -14,7 +14,12 @@ const PROJECT = path.join(ROOT, 'hyperframes', 'titles')
  */
 function hyperframesCommand(): { cmd: string; pre: string[] } {
   if (process.env.HUB_HYPERFRAMES) return { cmd: process.env.HUB_HYPERFRAMES, pre: [] }
-  const roots = [process.env.APPDATA && path.join(process.env.APPDATA, 'npm', 'node_modules'), path.join(ROOT, 'node_modules')].filter(Boolean) as string[]
+  const roots = [
+    process.env.APPDATA && path.join(process.env.APPDATA, 'npm', 'node_modules'),
+    // Amb l'instal·lador oficial de Node, els paquets globals poden anar al costat de node.exe.
+    path.join(path.dirname(process.execPath), 'node_modules'),
+    path.join(ROOT, 'node_modules'),
+  ].filter(Boolean) as string[]
   for (const r of roots) {
     const pkg = path.join(r, 'hyperframes', 'package.json')
     if (!existsSync(pkg)) continue

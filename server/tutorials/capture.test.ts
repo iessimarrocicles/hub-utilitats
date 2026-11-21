@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { planScene } from './capture.ts'
+import { captureFilter, planScene } from './capture.ts'
+
+describe('captureFilter', () => {
+  it('escala abans d’omplir els 60 fps, perquè les còpies no es reescalen una a una', () => {
+    // Amb fps abans de scale, una imatge de 8 s es convertia en 480 fotogrames 4K nous
+    // i ffmpeg arribava a més de 16 GB de memòria.
+    const f = captureFilter(3840, 2160, 60)
+    expect(f).toBe('scale=3840:2160:flags=lanczos,format=yuv420p,fps=60')
+    expect(f.indexOf('scale=')).toBeLessThan(f.indexOf('fps='))
+  })
+})
 
 describe('planScene', () => {
   it('sense accions, dura el que dura la veu més un poc d’aire', () => {

@@ -8,8 +8,11 @@ import { Button, Field, Notice, Section } from '../../../components/ui'
 import { JobProgress } from '../../reels/auto/components'
 import { serverFileUrl, tutorialFileUrl, tutorialsApi, useTutorialJob, type TutorialMeta } from '../api'
 import { PER_SCENE_GRAPHICS } from '../catalog'
+import { TTS_ENGINES } from '../types'
 import type { Action, CompositionInput, GenerateSettings, GraphicId, Scene, Storyboard, StyleTemplate, TtsEngineId, TutorialProject, VideoFormat } from '../types'
+import { CoverPanel } from './CoverPanel'
 import { STATUS } from './ProjectsPage'
+import { projectCover } from '../../../../video/lib/cover'
 
 const FORMATS: { id: VideoFormat; label: string }[] = [
   { id: '1080p', label: '16:9 · 1080p' },
@@ -80,6 +83,7 @@ export function TutorialPage() {
 
       {project.storyboard ? (
         <>
+          <CoverPanel project={project} busy={busy} onSaved={setProject} />
           <GeneratePanel project={project} meta={meta} busy={busy} onJob={setJob} onError={setError} onSaved={setProject} />
           <ScriptEditor project={project} meta={meta} busy={busy} onJob={setJob} onError={setError} onSaved={setProject} />
         </>
@@ -155,6 +159,7 @@ function GeneratePanel({ project, meta, busy, onJob, onError, onSaved }: PanelPr
   const [s, setS] = useState<GenerateSettings>(initial)
   const [sample, setSample] = useState<{ url: string; loading: boolean }>({ url: '', loading: false })
   const [eleven, setEleven] = useState<{ id: string; name: string; detail: string }[]>([])
+  const [studio, setStudio] = useState<{ id: string; name: string }[]>([])
   const template = meta.templates.find((t) => t.id === s.templateId) ?? meta.templates[0]
 
   useEffect(() => {
@@ -163,7 +168,22 @@ function GeneratePanel({ project, meta, busy, onJob, onError, onSaved }: PanelPr
     }
   }, [s.voice.engine, meta.engines.elevenlabs.ready, eleven.length, onError])
 
+  useEffect(() => {
+    if (s.voice.engine === 'voicestudio' && meta.engines.voicestudio.ready && studio.length === 0) {
+      tutorialsApi.voicestudioVoices().then(setStudio).catch((e) => onError(e instanceof Error ? e.message : String(e)))
+    }
+  }, [s.voice.engine, meta.engines.voicestudio.ready, studio.length, onError])
+
   const setVoice = (v: Partial<GenerateSettings['voice']>) => setS((x) => ({ ...x, voice: { ...x.voice, ...v } }))
+
+  // Les veus d'ElevenLabs i VoiceStudio arriben després de triar el motor: si la veu triada
+  // no és a la llista (o està buida), s'agafa la primera. Si no, el botó de generar queda desactivat.
+  const voiceIds = (s.voice.engine === 'elevenlabs' ? eleven : s.voice.engine === 'voicestudio' ? studio : []).map((v) => v.id)
+  const firstVoice = voiceIds[0]
+  const voiceMissing = voiceIds.length > 0 && !voiceIds.includes(s.voice.voice)
+  useEffect(() => {
+    if (voiceMissing && firstVoice) setS((x) => ({ ...x, voice: { ...x.voice, voice: firstVoice } }))
+  }, [voiceMissing, firstVoice])
   const toggle = (g: GraphicId) =>
     setS((x) => ({ ...x, graphics: x.graphics.includes(g) ? x.graphics.filter((y) => y !== g) : [...x.graphics, g] }))
 
@@ -172,7 +192,9 @@ function GeneratePanel({ project, meta, busy, onJob, onError, onSaved }: PanelPr
       ? meta.kokoroVoices
       : engine === 'f5'
         ? meta.f5Voices.map((v) => ({ id: v, name: v }))
-        : eleven.map((v) => ({ id: v.id, name: `${v.name}${v.detail ? ` · ${v.detail}` : ''}` }))
+        : engine === 'voicestudio'
+          ? studio
+          : eleven.map((v) => ({ id: v.id, name: `${v.name}${v.detail ? ` · ${v.detail}` : ''}` }))
 
   async function listen() {
     setSample({ url: '', loading: true })
@@ -238,7 +260,7 @@ function GeneratePanel({ project, meta, busy, onJob, onError, onSaved }: PanelPr
 
           <Field label="Com es genera la veu">
             <div className="flex flex-wrap gap-2">
-              {(['kokoro', 'f5', 'elevenlabs'] as TtsEngineId[]).map((e) => (
+              {TTS_ENGINES.map((e) => (
                 <label
                   key={e}
                   title={meta.engines[e].detail}
@@ -296,6 +318,14 @@ function GeneratePanel({ project, meta, busy, onJob, onError, onSaved }: PanelPr
           </div>
         </div>
 
+        <label className="flex cursor-pointer items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={s.coverInVideo !== false} onChange={(e) => setS((x) => ({ ...x, coverInVideo: e.target.checked }))} />
+          <span>
+            <span className="font-semibold">Començar el vídeo amb la miniatura</span>
+            <span className="block text-xs text-muted">Ix els primers 3 segons, abans de la presentació. La miniatura com a imatge es genera igualment.</span>
+          </span>
+        </label>
+
         <LivePreview project={project} template={template} settings={s} />
 
         <div className="flex flex-wrap items-center gap-3">
@@ -341,8 +371,13 @@ function LivePreview({ project, template, settings }: { project: TutorialProject
       template,
       graphics: settings.graphics,
       format: settings.format,
+      cover: {
+        ...projectCover(project),
+        image: project.coverImage ? tutorialFileUrl(project.id, project.coverImage.file, project.coverImage.updatedAt) : undefined,
+        inVideo: settings.coverInVideo !== false,
+      },
     }
-  }, [project, template, settings.graphics, settings.format])
+  }, [project, template, settings.graphics, settings.format, settings.coverInVideo])
 
   if (!input) {
     return (

@@ -41,6 +41,16 @@ export interface Chapter {
   scenes: Scene[]
 }
 
+/** Textos de la miniatura (portada). Els proposa Claude i es poden editar. */
+export interface CoverText {
+  /** Títol curt i gran, per exemple el nom de l'eina («LEONARDO.AI»). */
+  title: string
+  /** Què es fa en el vídeo («REGISTRE I INTERFÍCIE D'USUARI»). */
+  subtitle: string
+  /** Marca de la cantonada inferior («DOCENTSTIC»). */
+  brand: string
+}
+
 export interface Storyboard {
   title: string
   summary: string
@@ -48,6 +58,7 @@ export interface Storyboard {
   /** Punts clau per a la peça de resum final. */
   takeaways: string[]
   chapters: Chapter[]
+  cover?: CoverText
 }
 
 // --- Anàlisi de la pàgina ---------------------------------------------------
@@ -84,11 +95,13 @@ export interface PageAnalysis {
 
 // --- Veu ----------------------------------------------------------------------
 
-export type TtsEngineId = 'kokoro' | 'f5' | 'elevenlabs'
+export type TtsEngineId = 'kokoro' | 'f5' | 'elevenlabs' | 'voicestudio'
+
+export const TTS_ENGINES: TtsEngineId[] = ['kokoro', 'f5', 'elevenlabs', 'voicestudio']
 
 export interface VoiceOptions {
   engine: TtsEngineId
-  /** Kokoro: ef_dora, em_alex, em_santa. ElevenLabs: voice_id. F5: nom de la mostra de veu. */
+  /** Kokoro: ef_dora, em_alex, em_santa. ElevenLabs: voice_id. F5: nom de la mostra. VoiceStudio: id del perfil de veu. */
   voice: string
   /** 0.8 – 1.2 */
   speed: number
@@ -201,6 +214,8 @@ export interface GenerateSettings {
   format: VideoFormat
   voice: VoiceOptions
   graphics: GraphicId[]
+  /** Mostra la miniatura els primers segons del vídeo. Per defecte, sí. */
+  coverInVideo?: boolean
 }
 
 export interface TutorialProject {
@@ -222,6 +237,12 @@ export interface TutorialProject {
   audio?: SceneAudio[]
   capture?: CaptureResult
   final?: { file: string; srt: string; vtt: string; thumb: string; duration: number; lufs: number | null; updatedAt: string }
+  /** Textos de la miniatura editats per l'usuari. Si no n'hi ha, s'usa la proposta del guió. */
+  cover?: CoverText
+  /** Imatge de la miniatura, ja sense fons (relativa a la carpeta del tutorial). */
+  coverImage?: { file: string; updatedAt: string }
+  /** Última miniatura generada a part del vídeo. */
+  coverStill?: { file: string; updatedAt: string }
   lastError?: string
   notices?: string[]
 }
@@ -243,4 +264,23 @@ export type CompositionInput = {
   format: VideoFormat
   /** Clips de pantalla completa fets amb HyperFrames, si n'hi ha. */
   clips?: { intro?: string; outro?: string }
+  /** Miniatura: textos, imatge sense fons i si ix a l'inici del vídeo. */
+  cover?: CoverInput
+}
+
+/** Dades de la composició «Cover» (la miniatura com a imatge fixa). */
+export type CoverStillInput = {
+  cover: CoverInput
+  format: VideoFormat
+  /** Durada del vídeo, per a «X MINUTS». */
+  seconds: number
+}
+
+export type CoverInput = CoverText & {
+  /** URL de la imatge sense fons, si n'hi ha. */
+  image?: string
+  /** La miniatura ocupa els primers segons del vídeo. */
+  inVideo: boolean
+  /** Durada del vídeo per a «X MINUTS». Si falta, es calcula de la línia de temps. */
+  seconds?: number
 }

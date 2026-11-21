@@ -7,5 +7,7 @@ export default defineConfig({
   // Rutes relatives: funciona igual en local i a GitHub Pages (/<repo>/).
   base: './',
   plugins: [react(), tailwindcss()],
+  // workspace/ és del servidor (vídeos, perfil del navegador): vigilar-lo recarregava la web.
+  server: { watch: { ignored: ['**/workspace/**'] } },
   test: { environment: 'jsdom' },
 })

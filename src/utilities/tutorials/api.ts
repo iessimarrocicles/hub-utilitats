@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { serverUrl } from '../reels/auto/api'
 import type { Job } from '../reels/auto/types'
 import type { GraphicInfo } from './catalog'
-import type { GenerateSettings, StyleTemplate, Storyboard, TtsEngineId, TutorialProject, VoiceOptions } from './types'
+import type { CoverText, GenerateSettings, StyleTemplate, Storyboard, TtsEngineId, TutorialProject, VoiceOptions } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
@@ -56,6 +56,7 @@ export const tutorialsApi = {
   saveTemplates: (templates: StyleTemplate[]) => request<StyleTemplate[]>('/api/tutorials/templates', json('PUT', { templates })),
   voiceSample: (voice: VoiceOptions, text?: string) => request<{ url: string; duration: number }>('/api/tutorials/voice-sample', json('POST', { voice, text })),
   elevenVoices: () => request<{ id: string; name: string; detail: string }[]>('/api/tutorials/elevenlabs/voices'),
+  voicestudioVoices: () => request<{ id: string; name: string }[]>('/api/tutorials/voicestudio/voices'),
   uploadVoice: (name: string, text: string, file: File) => {
     const form = new FormData()
     form.append('name', name)
@@ -63,6 +64,14 @@ export const tutorialsApi = {
     form.append('file', file)
     return request<{ name: string }>('/api/tutorials/voices', { method: 'POST', body: form })
   },
+  saveCover: (id: string, cover: CoverText | null) => request<TutorialProject>(`/api/tutorials/${id}/cover`, json('PUT', { cover })),
+  uploadCoverImage: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<TutorialProject>(`/api/tutorials/${id}/cover-image`, { method: 'POST', body: form })
+  },
+  removeCoverImage: (id: string) => request<TutorialProject>(`/api/tutorials/${id}/cover-image`, { method: 'DELETE' }),
+  coverStill: (id: string) => request<TutorialProject>(`/api/tutorials/${id}/cover-still`, { method: 'POST' }),
   login: (url: string) => request<{ ok: true }>('/api/tutorials/session', json('POST', { url })),
   logout: () => request<{ ok: true }>('/api/tutorials/session', { method: 'DELETE' }),
 }

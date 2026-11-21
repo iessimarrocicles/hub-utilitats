@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { Action, Locator, PageAnalysis, PageElement, Storyboard } from '../../src/utilities/tutorials/types.ts'
+import { DEFAULT_BRAND } from '../../video/lib/cover.ts'
 import { askClaude } from '../claude.ts'
 import { performAction } from './actions.ts'
 import { readElements, settle } from './analyze.ts'
@@ -29,6 +30,12 @@ export const STORYBOARD_SCHEMA = {
     title: { type: 'string' },
     summary: { type: 'string' },
     takeaways: { type: 'array', items: { type: 'string' }, maxItems: 5 },
+    cover: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['title', 'subtitle'],
+      properties: { title: { type: 'string' }, subtitle: { type: 'string' } },
+    },
     chapters: {
       type: 'array',
       minItems: 1,
@@ -77,6 +84,7 @@ interface RawStoryboard {
   title: string
   summary: string
   takeaways: string[]
+  cover?: { title: string; subtitle: string }
   chapters: {
     title: string
     scenes: { narration: string; callout?: string; focus?: RawLocator; actions: (Omit<Action, 'target'> & { target?: RawLocator })[] }[]
@@ -118,7 +126,10 @@ CÓMO ESCRIBIR EL GUION
 - "focus": el elemento que hay que destacar en la escena (normalmente el de la acción principal). "callout": rótulo breve (máx. 5 palabras) que aparecerá junto al elemento, solo cuando aporte.
 - "takeaways": 3-5 ideas clave para la pantalla de resumen.
 - "summary": una sola frase de 25 palabras como máximo; aparece en la pantalla de presentación.
-- "title": corto, 8 palabras como máximo.`
+- "title": corto, 8 palabras como máximo.
+- "cover": textos de la miniatura del vídeo, EN VALENCIANO (catalán), como en «LEONARDO.AI» / «REGISTRE I INTERFÍCIE D'USUARI».
+  · "title": el nombre de la herramienta o del tema, 1-3 palabras (máx. 18 caracteres).
+  · "subtitle": qué se aprende, 2-5 palabras (máx. 32 caracteres). Sin punto final.`
 }
 
 function fixPrompt(board: RawStoryboard, errors: { scene: string; error: string; elements: string }[]): string {
@@ -148,6 +159,9 @@ export function normalizeStoryboard(raw: RawStoryboard, analysis: PageAnalysis):
     title: raw.title,
     summary: raw.summary,
     takeaways: raw.takeaways ?? [],
+    cover: raw.cover?.title?.trim()
+      ? { title: raw.cover.title.trim(), subtitle: raw.cover.subtitle?.trim() ?? '', brand: DEFAULT_BRAND }
+      : undefined,
     startUrl: analysis.url,
     chapters: raw.chapters.map((c, ci) => ({
       id: `c${ci + 1}`,
@@ -169,6 +183,7 @@ function toRaw(b: Storyboard): RawStoryboard {
     title: b.title,
     summary: b.summary,
     takeaways: b.takeaways,
+    cover: b.cover ? { title: b.cover.title, subtitle: b.cover.subtitle } : undefined,
     chapters: b.chapters.map((c) => ({ title: c.title, scenes: c.scenes.map((s) => ({ narration: s.narration, callout: s.callout, focus: s.focus, actions: s.actions })) })),
   }
 }
@@ -240,7 +255,10 @@ export async function writeScript(
       cwd: path.resolve(analysisDir),
       tools: [],
     })
+    // La correcció és sobre les accions: si no torna els textos de la miniatura, es conserven.
+    const previousCover = board.cover
     board = normalizeStoryboard(fixed.output, analysis)
+    board.cover ??= previousCover
   }
   return { storyboard: board, errors }
 }

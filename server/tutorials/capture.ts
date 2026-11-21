@@ -143,6 +143,15 @@ export async function captureStoryboard(
   }
 }
 
+/**
+ * Filtre de la captura. L'escalat va ABANS de fps: així cada imatge del navegador s'escala una vegada
+ * i les còpies que fps fa per omplir els 60 fotogrames per segon són referències, no fotogrames 4K nous.
+ * A l'inrevés, una imatge que dura 8 s generava 480 fotogrames de 26 MB i ffmpeg passava de 16 GB.
+ */
+export function captureFilter(width: number, height: number, fps: number): string {
+  return `scale=${width}:${height}:flags=lanczos,format=yuv420p,fps=${fps}`
+}
+
 /** Fotogrames irregulars del screencast → vídeo a 60 fps constants, alta qualitat i fàcil de buscar. */
 async function encodeFrames(frames: { file: string; t: number }[], duration: number, dir: string, out: string): Promise<void> {
   if (frames.length === 0) throw new Error('El navegador no ha enviat cap fotograma.')
@@ -159,7 +168,7 @@ async function encodeFrames(frames: { file: string; t: number }[], duration: num
     'ffmpeg',
     [
       '-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', 'list.txt',
-      '-vf', `fps=${FPS},scale=${VIEWPORT.width * SCALE}:${VIEWPORT.height * SCALE}:flags=lanczos,format=yuv420p`,
+      '-vf', captureFilter(VIEWPORT.width * SCALE, VIEWPORT.height * SCALE, FPS),
       '-c:v', 'libx264', '-preset', 'medium', '-crf', '12', '-g', String(FPS), '-tune', 'stillimage',
       '-t', duration.toFixed(3), '-movflags', '+faststart', out,
     ],

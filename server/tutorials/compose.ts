@@ -4,8 +4,9 @@ import { readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises
 import os from 'node:os'
 import path from 'node:path'
 import { chromium } from 'playwright'
-import type { CompositionInput } from '../../src/utilities/tutorials/types.ts'
-import { buildTimeline, SIZES, type Timeline } from '../../video/lib/timeline.ts'
+import type { CompositionInput, CoverStillInput } from '../../src/utilities/tutorials/types.ts'
+import { COVER_STILL_SECONDS } from '../../video/lib/cover.ts'
+import { buildTimeline, SIZES, toFrames, type Timeline } from '../../video/lib/timeline.ts'
 import { BROWSER_PATH, ROOT, WORKSPACE } from '../config.ts'
 import { runOk } from '../lib/run.ts'
 import { normalizeLoudness } from '../media.ts'
@@ -66,6 +67,32 @@ function renderBrowser(): { browserExecutable: string; chromeMode: 'headless-she
   return { browserExecutable: chromium.executablePath(), chromeMode: 'chrome-for-testing' }
 }
 
+/**
+ * Miniatura com a imatge fixa, amb la mateixa peça que obri el vídeo.
+ * Sempre a 1920×1080 (o 1080×1920 en vertical): és la mida que demanen les plataformes.
+ */
+export async function renderCoverStill(
+  data: CoverStillInput,
+  output: string,
+  stage?: (s: string) => void,
+): Promise<void> {
+  const serveUrl = await ensureBundle(stage)
+  const { selectComposition, renderStill } = await import('@remotion/renderer')
+  const inputProps = data as unknown as Record<string, unknown>
+  const common = { serveUrl, inputProps, ...renderBrowser(), logLevel: 'warn' as const }
+  const composition = await selectComposition({ ...common, id: 'Cover' })
+  await renderStill({
+    ...common,
+    composition,
+    output,
+    frame: Math.min(composition.durationInFrames - 1, toFrames(COVER_STILL_SECONDS)),
+    imageFormat: 'jpeg',
+    jpegQuality: 92,
+    scale: 1,
+    timeoutInMilliseconds: 120_000,
+  })
+}
+
 export interface RenderResult {
   file: string
   duration: number
@@ -77,7 +104,7 @@ export async function renderTutorial(
   outDir: string,
   name: string,
   opts: { stage: (s: string, p?: number | null) => void },
-): Promise<RenderResult & { timeline: Timeline }> {
+): Promise<RenderResult & { timeline: Timeline; coverError?: string }> {
   const serveUrl = await ensureBundle(opts.stage)
   const { selectComposition, renderMedia } = await import('@remotion/renderer')
   const inputProps = input as unknown as Record<string, unknown>
@@ -118,10 +145,24 @@ export async function renderTutorial(
   await addChapters(outDir, final, timeline, input.storyboard.title)
   await writeFile(path.join(outDir, `${name}.srt`), toSrt(timeline, input), 'utf8')
   await writeFile(path.join(outDir, `${name}.vtt`), toVtt(timeline, input), 'utf8')
-  const firstCapture = timeline.segments.find((s) => s.kind === 'capture')
-  const thumbAt = firstCapture ? firstCapture.from + Math.min(4, firstCapture.duration / 2) : 1
-  await runOk('ffmpeg', ['-y', '-v', 'error', '-ss', thumbAt.toFixed(2), '-i', final, '-frames:v', '1', '-q:v', '2', `${name}.jpg`], { cwd: outDir })
-  return { file: final, duration: timeline.duration, lufs: loud.lufs, timeline }
+  // Miniatura amb la plantilla; si falla, un fotograma de la primera captura.
+  let coverError: string | undefined
+  if (input.cover) {
+    try {
+      await renderCoverStill(
+        { cover: { ...input.cover, seconds: timeline.duration }, format: input.format, seconds: timeline.duration },
+        path.join(outDir, `${name}.jpg`),
+      )
+    } catch (err) {
+      coverError = (err as Error).message.split('\n')[0]
+    }
+  }
+  if (!input.cover || coverError) {
+    const firstCapture = timeline.segments.find((s) => s.kind === 'capture')
+    const thumbAt = firstCapture ? firstCapture.from + Math.min(4, firstCapture.duration / 2) : 1
+    await runOk('ffmpeg', ['-y', '-v', 'error', '-ss', thumbAt.toFixed(2), '-i', final, '-frames:v', '1', '-q:v', '2', `${name}.jpg`], { cwd: outDir })
+  }
+  return { file: final, duration: timeline.duration, lufs: loud.lufs, timeline, coverError }
 }
 
 async function addChapters(dir: string, file: string, timeline: Timeline, title: string): Promise<void> {

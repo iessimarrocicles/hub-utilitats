@@ -42,6 +42,11 @@ export const TTS_PYTHON =
       : PYTHON)
 export const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY ?? ''
 export const ELEVENLABS_MODEL = process.env.HUB_ELEVENLABS_MODEL ?? 'eleven_multilingual_v2'
+/** Format d'àudio. mp3_44100_128 funciona en tots els plans; 192 kbps demana Creator o superior. */
+export const ELEVENLABS_FORMAT = process.env.HUB_ELEVENLABS_FORMAT ?? 'mp3_44100_128'
+/** VoiceStudio local (API compatible amb OpenAI). «tts-1» = el motor actiu a l'aplicació. */
+export const VOICESTUDIO_URL = (process.env.HUB_VOICESTUDIO_URL ?? 'http://127.0.0.1:3900').replace(/\/+$/, '')
+export const VOICESTUDIO_MODEL = process.env.HUB_VOICESTUDIO_MODEL ?? 'tts-1'
 /** Navegador per a capturar. Buit = el Chromium de Playwright. */
 export const BROWSER_PATH = process.env.HUB_BROWSER_PATH ?? ''
 
